@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "tbot-test-task"
+version = "0.1.0"
+description = ""
+authors = ["Igor-Mozharov <r5@ukr.net>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+python-telegram-bot = "^22.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
