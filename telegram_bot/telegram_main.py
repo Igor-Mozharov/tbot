@@ -1,17 +1,12 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes
 import json
 import os
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes
+from mindee_api.mindee_main import mindee_mock
 
 
 UPLOAD_DIR = 'uploaded_files'
 os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-
-def telegram_credentials():
-    with open('telegram_bot/config.json', 'r') as file:
-        res = json.load(file)
-        return res['BOT_TOKEN']
 
 
 def messages():
@@ -25,7 +20,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     buttons = [
         [InlineKeyboardButton('About us', callback_data='about_us')],
-        [InlineKeyboardButton('Сost calculation', callback_data='cost calculation')]
+        [InlineKeyboardButton('Сost calculation', callback_data='cost_calculation')]
     ]
     markup = InlineKeyboardMarkup(buttons)
     await context.bot.send_message(chat_id=update.effective_chat.id, text=introduction, reply_markup=markup)
@@ -68,10 +63,17 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if file_info:
         file_path = os.path.join(UPLOAD_DIR, file_name)
         await file_info.download_to_drive(file_path)
+
+        result = mindee_mock()
+        await message.reply_text(f"Please check if all info is ok!\n{result}")
+
         if 'files' not in context.user_data:
             context.user_data['files'] = []
         context.user_data['files'].append({'file_id': file_info.file_id, 'file_name': file_name})
-        await message.reply_text(f"File received and saved: {file_name}")
+        # await message.reply_text(f"File received and saved: {file_name}")
+        for f in os.listdir(UPLOAD_DIR):
+            temp = os.path.join(UPLOAD_DIR, f)
+            os.remove(temp)
 
 
 async def done(update: Update, context: ContextTypes.DEFAULT_TYPE):
