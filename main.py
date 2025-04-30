@@ -26,3 +26,5 @@ if __name__ == '__main__':
     application.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO, handle_file))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, dialog_handler))
     application.run_polling()
+
+    threading.Event().wait()
