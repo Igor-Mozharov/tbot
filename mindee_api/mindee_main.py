@@ -8,6 +8,11 @@ from mindee.product.generated import GeneratedV1
 
 
 def mindee_mock():
+    """
+    Send files to mindee for data detection
+    :return output text
+
+    """
     mindee_client = Client(api_key=credentialss('MINDEE_TOKEN'))
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     upload_dir = os.path.join(project_root, 'uploaded_files')

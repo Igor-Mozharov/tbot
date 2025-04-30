@@ -1,10 +1,12 @@
-import os
 from configparser import ConfigParser
 
 
 def credentialss(source):
-    # project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-    # config_path = os.path.join(project_root, 'config.ini')
+    """
+    Get credentials from source file
+    :param source: Source file
+    :return selected credential
+    """
     parser = ConfigParser()
     parser.read('config.ini')
     return parser['all'][source]

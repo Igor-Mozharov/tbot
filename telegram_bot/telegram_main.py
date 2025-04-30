@@ -3,6 +3,7 @@ import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from mindee_api.mindee_main import mindee_mock
+from openai_api.openai_main import gemini_speaker
 
 
 UPLOAD_DIR = 'uploaded_files'
@@ -10,14 +11,23 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
 def messages():
+    """
+    Loads predefined messages from the JSON configuration file.
+    Returns: dict: A dictionary containing message texts for the bot.
+    """
     with open('telegram_bot/messages.json') as file:
         res = json.load(file)
         return res
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    introduction = messages()['intro']
+    """
+    The /start command. Greetings from bot
+    :param update: Incoming update from the user
+    :param context:Context object with user data
 
+    """
+    introduction = messages()['intro']
     buttons = [
         [InlineKeyboardButton('About us', callback_data='about_us')],
         [InlineKeyboardButton('Сost calculation', callback_data='cost_calculation')]
@@ -27,6 +37,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def about(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    About page. Insurance company introduction
+    :param update: Incoming update from the user
+    :param context:Context object with user data
+
+    """
     about_us = messages()['about']
     buttons = [
         [InlineKeyboardButton('Сost calculation', callback_data='cost_calculation')]
@@ -36,6 +52,12 @@ async def about(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cost_calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Page for insurance cost calculation. Instruction for user.
+    :param update: Incoming update from the user
+    :param context:Context object with user data
+
+    """
     cost_message = messages()['instructions']
     buttons = [
         [InlineKeyboardButton('About us', callback_data='about_us')],
@@ -47,6 +69,12 @@ async def cost_calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Handles uploaded file or photo, extracts information using Mindee, and shows extracted data for confirmation
+    :param update: Incoming update from the user
+    :param context:Context object with user data
+
+    """
     message = update.message
     file_info = None
     if message.document:
@@ -59,32 +87,48 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await message.reply_text('Please send a document or a photo.')
         return
-
     if file_info:
         file_path = os.path.join(UPLOAD_DIR, file_name)
         await file_info.download_to_drive(file_path)
-
         result = mindee_mock()
-        await message.reply_text(f"Please check if all info is ok!\n{result}")
-
+        context.user_data['mindee_result'] = result
+        buttons = [
+            [InlineKeyboardButton('Accept', callback_data='accept_data')],
+            [InlineKeyboardButton('Reject', callback_data='reject_data')]
+        ]
+        b_markup = InlineKeyboardMarkup(buttons)
+        await message.reply_text(f"Please check if all info is ok:\n\n{result}", reply_markup=b_markup)
         if 'files' not in context.user_data:
             context.user_data['files'] = []
         context.user_data['files'].append({'file_id': file_info.file_id, 'file_name': file_name})
-        # await message.reply_text(f"File received and saved: {file_name}")
         for f in os.listdir(UPLOAD_DIR):
             temp = os.path.join(UPLOAD_DIR, f)
             os.remove(temp)
 
 
-async def done(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
+async def dialog_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Generate text message for user-bot dialog
+    :param update: Incoming update from the user
+    :param context:Context object with user data
+    """
+    message = update.message.text
+    gemini_response = gemini_speaker(message)
+    await update.message.reply_text(gemini_response)
 
+
+async def done(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Function for confirmation of uploaded files
+    :param update: Incoming update from the user
+    :param context:Context object with user data
+
+    """
+    query = update.callback_query
     if 'files' not in context.user_data or not context.user_data['files']:
         await query.message.reply_text("There are no uploaded files!")
         return
-
     file_list = '\n'.join(f['file_name'] for f in context.user_data['files'])
-
     await query.message.reply_text(
         f"Uploaded files:\n{file_list}\nSaved successfully!"
     )
@@ -92,6 +136,12 @@ async def done(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Inline buttons callbacks function
+    :param update: Incoming update from the user
+    :param context:Context object with user data
+
+    """
     query = update.callback_query
     if query.data == 'about_us':
         await about(update, context)
@@ -99,3 +149,25 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await cost_calc(update, context)
     elif query.data == 'done':
         await done(update, context)
+    elif query.data == 'accept_data':
+        buttons = [
+            [InlineKeyboardButton('Accept and pay for it !', callback_data='pay')],
+            [InlineKeyboardButton('Decline', callback_data='not_pay')]
+        ]
+        choise_mark = InlineKeyboardMarkup(buttons)
+        await query.edit_message_text('Thank you! Your cost is 100$', reply_markup=choise_mark)
+    elif query.data == 'reject_data':
+        await query.edit_message_text('Try to upload documents again!')
+        context.user_data.pop('files', None)
+    elif query.data == 'pay':
+        await query.answer()
+        mindee_result = context.user_data.get('mindee_result', 'No data found')
+        prompt = (
+            f"Please generate a short Ukrainian insurance policy document based on the following extracted information:\n"
+            f"{mindee_result}\n"
+            f"Only generate the fields of the policy, keep it formal."
+        )
+        await query.edit_message_text(gemini_speaker(prompt))
+    elif query.data == 'not_pay':
+        await query.answer()
+        await query.edit_message_text('My appologize, sir! But your insurance is 100$, and it can"t be lower!')
