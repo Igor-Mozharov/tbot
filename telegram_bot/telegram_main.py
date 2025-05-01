@@ -113,8 +113,13 @@ async def dialog_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     :param context:Context object with user data
     """
     message = update.message.text
-    gemini_response = gemini_speaker(message)
-    await update.message.reply_text(gemini_response)
+    buttons = [
+        [InlineKeyboardButton('About us', callback_data='about_us')],
+        [InlineKeyboardButton('Сost calculation', callback_data='cost_calculation')]
+    ]
+    markup = InlineKeyboardMarkup(buttons)
+    gemini_response = gemini_speaker(messages()['gemini_instruction'] + '\n' + message)
+    await update.message.reply_text(gemini_response, reply_markup=markup)
 
 
 async def done(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -135,6 +140,79 @@ async def done(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['files'] = []
 
 
+async def accept_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Function for confirmation of mindee returned response (after document upload)
+    :param update: Incoming update from the user
+    :param context:Context object with user data
+
+    """
+    query = update.callback_query
+    buttons = [
+        [InlineKeyboardButton('Accept and pay for it !', callback_data='pay')],
+        [InlineKeyboardButton('Decline', callback_data='not_pay')]
+    ]
+    choise_mark = InlineKeyboardMarkup(buttons)
+    await query.edit_message_text('Thank you! Your cost is 100$', reply_markup=choise_mark)
+
+
+async def reject_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Function for rejection of mindee returned response (after document upload)
+    :param update: Incoming update from the user
+    :param context:Context object with user data
+
+    """
+    query = update.callback_query
+    buttons = [
+        [InlineKeyboardButton('About us', callback_data='about_us')],
+    ]
+    markup = InlineKeyboardMarkup(buttons)
+    await query.edit_message_text('Try to upload documents again!', reply_markup=markup)
+    context.user_data.pop('files', None)
+
+
+async def pay(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Function for confirming of mindee response / buy polis (generate insurance polis after that)
+    :param update: Incoming update from the user
+    :param context:Context object with user data
+
+    """
+    query = update.callback_query
+    await query.answer()
+    mindee_result = context.user_data.get('mindee_result', 'No data found')
+    prompt = (
+        f"Please generate a short Ukrainian insurance policy document based on the following extracted information:\n"
+        f"{mindee_result}\n"
+        f"Only generate the fields of the policy, keep it formal."
+    )
+    buttons = [
+        [InlineKeyboardButton('About us', callback_data='about_us')],
+        [InlineKeyboardButton('Сost calculation', callback_data='cost_calculation')]
+    ]
+    markup = InlineKeyboardMarkup(buttons)
+    await query.edit_message_text(gemini_speaker(prompt), reply_markup=markup)
+
+
+async def not_pay(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Function for declining of mindee response / not buy polis
+    :param update: Incoming update from the user
+    :param context:Context object with user data
+
+    """
+    query = update.callback_query
+    await query.answer()
+    buttons = [
+        [InlineKeyboardButton('About us', callback_data='about_us')],
+        [InlineKeyboardButton('Calculate again', callback_data='cost_calculation')]
+    ]
+    markup = InlineKeyboardMarkup(buttons)
+    await query.edit_message_text('My appologize, sir! But your insurance is 100$, and it can"t be lower!',
+                                  reply_markup=markup)
+
+
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Inline buttons callbacks function
@@ -143,31 +221,18 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     """
     query = update.callback_query
-    if query.data == 'about_us':
-        await about(update, context)
-    elif query.data == 'cost_calculation':
-        await cost_calc(update, context)
-    elif query.data == 'done':
-        await done(update, context)
-    elif query.data == 'accept_data':
-        buttons = [
-            [InlineKeyboardButton('Accept and pay for it !', callback_data='pay')],
-            [InlineKeyboardButton('Decline', callback_data='not_pay')]
-        ]
-        choise_mark = InlineKeyboardMarkup(buttons)
-        await query.edit_message_text('Thank you! Your cost is 100$', reply_markup=choise_mark)
-    elif query.data == 'reject_data':
-        await query.edit_message_text('Try to upload documents again!')
-        context.user_data.pop('files', None)
-    elif query.data == 'pay':
-        await query.answer()
-        mindee_result = context.user_data.get('mindee_result', 'No data found')
-        prompt = (
-            f"Please generate a short Ukrainian insurance policy document based on the following extracted information:\n"
-            f"{mindee_result}\n"
-            f"Only generate the fields of the policy, keep it formal."
-        )
-        await query.edit_message_text(gemini_speaker(prompt))
-    elif query.data == 'not_pay':
-        await query.answer()
-        await query.edit_message_text('My appologize, sir! But your insurance is 100$, and it can"t be lower!')
+    callback = query.data
+
+    commands_list = {
+        'about_us': about,
+        'cost_calculation': cost_calc,
+        'done': done,
+        'accept_data': accept_data,
+        'reject_data': reject_data,
+        'pay': pay,
+        'not_pay': not_pay
+    }
+    result = commands_list.get(callback)
+    if result:
+        await result(update, context)
+
